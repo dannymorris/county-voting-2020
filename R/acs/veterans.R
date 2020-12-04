@@ -1,11 +1,11 @@
-library(tidycensus)
+
 library(dplyr)
 library(tidyr)
 library(stringr)
 
-source("call_api.R")
-source("tag_colnames.R")
-source("list_acs_variables.R")
+source("R/utils/call_api.R")
+source("R/utils/tag_colnames.R")
+source("R/utils/get_acs_variables.R")
 
 get_veterans <- function(tag) {
   

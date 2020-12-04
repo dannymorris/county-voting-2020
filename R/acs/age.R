@@ -1,9 +1,11 @@
-library(tidycensus)
+
 library(dplyr)
 library(tidyr)
+library(stringr)
 
-source("call_api.R")
-source("tag_colnames.R")
+source("R/utils/call_api.R")
+source("R/utils/tag_colnames.R")
+source("R/utils/get_acs_variables.R")
 
 bucket_age <- function(x) {
   out <- vector("character", length = length(x))
@@ -17,15 +19,15 @@ bucket_age <- function(x) {
 
 get_age <- function(tag) {
   
-  age_vars <- load_acs_vars() %>%
+  variables <- load_acs_vars() %>%
     filter(concept == "SEX BY AGE") %>%
     filter(!str_detect(label, 'Under 5|5 to 9|10 to 14|15 to 17')) %>%
     filter(!label %in% c("Estimate!!Total", "Estimate!!Total!!Male", "Estimate!!Total!!Female")) %>%
     select(name, label) %>%
     distinct()
   
-  out <- call_api(vars = age_vars$name) %>%
-    inner_join(age_vars, by = c("variable" = "name")) %>%
+  out <- call_api(vars = variables$name) %>%
+    inner_join(variables, by = c("variable" = "name")) %>%
     mutate(label = str_remove_all(label, "Estimate!!|!!Female|!!Male")) %>%
     group_by(GEOID, label) %>%
     summarise(estimate = sum(estimate)) %>%

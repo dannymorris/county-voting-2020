@@ -1,0 +1,191 @@
+---
+title: Association rule mining to find correlations between presidential preference and county-level population demographics using Census data
+author: "Danny Morris"
+date: "12/3/2020"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+## R packages
+
+```{r}
+library(dplyr)
+library(tibble)
+library(tidycensus)
+library(arules)
+library(DT)
+```
+
+## Load functions and Census API key
+
+```{r}
+census_api_key(Sys.getenv("CENSUS_API_KEY"))
+
+source("R/utils/arules_utils.R")
+source("R/voting_results.R")
+source("R/acs/population.R")
+source("R/acs/age.R")
+source("R/acs/race.R")
+source("R/acs/gini.R")
+source("R/acs/income.R")
+source("R/acs/unemployment.R")
+source("R/acs/education.R")
+source("R/acs/industry.R")
+source("R/acs/citizenship.R")
+source("R/acs/insurance.R")
+source("R/acs/veterans.R")
+```
+
+## Data
+
+### Presidential voting outcomes
+
+```{r}
+votes <- get_voting_results()
+
+datatable(votes) %>%
+  formatRound(columns = c("trump_pct", "biden_pct", "margin"), digits = 3)
+```
+
+### American Community Survey (ACS) demographic variables
+
+County-level demographic characteristics taken from the 2018 5-year American Community Survey for use in the association rules analysis:
+
+- Population counts by age band
+- Population counts by race
+- Gini index (income inequality)
+- Income per capita
+- Unemployment rate
+- Population counts by educational attainment
+- Population counts by industry
+- Population counts by citizenship status
+- Population counts by insurance coverage
+- Population counts by veteran status
+
+```{r}
+population <- get_population(tag = "POPULATION")
+age <- get_age(tag = "AGE")
+race <- get_race(tag = "RACE")
+gini <- get_gini(tag = "GINI")
+income <- get_income(tag = "INCOME")
+unemployment <- get_unemployment(tag = "UNEMPLOY")
+education <- get_education(tag = "EDU_ATTAIN")
+industry <- get_industry(tag = "INDUSTRY")
+citizenship <- get_citizenship(tag = "CITIZEN")
+insurance <- get_insurance(tag = "HEALTH_INSURANCE")
+veterans <- get_veterans(tag = "VETERANS")
+```
+
+### Merge votes and ACS data
+
+```{r}
+data_joins <- votes %>%
+  select(fips, state, name, party_winner, trump_pct, margin) %>%
+  inner_join(population, by = c("fips" = "GEOID")) %>%
+  inner_join(age, by = c("fips" = "GEOID")) %>%
+  inner_join(race, by = c("fips" = "GEOID")) %>%
+  inner_join(gini, by = c("fips" = "GEOID")) %>%
+  inner_join(income, by = c("fips" = "GEOID")) %>%
+  inner_join(unemployment, by = c("fips" = "GEOID")) %>%
+  inner_join(education, by = c("fips" = "GEOID")) %>%
+  inner_join(industry, by = c("fips" = "GEOID")) %>%
+  inner_join(citizenship, by = c("fips" = "GEOID")) %>%
+  inner_join(insurance, by = c("fips" = "GEOID")) %>%
+  inner_join(veterans , by = c("fips" = "GEOID")) %>%
+  drop_na()
+
+colnames(data_joins) %>%
+  enframe(name = "column_position", value = "column_name") %>%
+  datatable(caption = "Column names")
+```
+
+### Adjust demographics by population size
+
+```{r}
+population_adjusted <- data_joins %>%
+  mutate_at(vars(AGE_18_29,
+                 AGE_30_44,
+                 AGE_45_59,
+                 AGE_60_Plus,
+                 contains("UNEMPLOY"),
+                 contains("HEALTH_INSURANCE"),
+                 contains("VETERANS"),
+                 contains("EDU_ATTAIN"),
+                 contains("INDUSTRY")), 
+            list(~./AGE_18_Plus)) %>%
+  mutate_at(vars(contains("RACE"),
+                 contains("CITIZEN")),
+            list(~./POPULATION_Total)) 
+```
+
+## Association rule mining
+
+### Convert numeric variables to discrete categories
+
+```{r}
+decile_data <- population_adjusted %>%
+  select(-fips, -state, -name, -party_winner, -margin, 
+         -AGE_18_Plus, -POPULATION_Total) %>%
+  mutate(trump_pct = bucket_percentage(trump_pct)) %>%
+  mutate_at(vars(-trump_pct), convert_numeric_to_discrete) 
+```
+
+### Convert discrete categories to binary indicators
+
+```{r}
+binary_data <- decile_data %>%
+  convert_to_dummies()
+```
+
+### Convert binary indicators to transactions
+
+```{r}
+transactions <- convert_df_to_transactions(df = binary_data)
+```
+
+### Generate association rules for strong Trump support
+
+```{r}
+trump_arules <- run_apriori(
+  trans = transactions,
+  min_supp = 0.001,
+  min_conf = 0.001,
+  minlen = 2,
+  maxlen = 2,
+  default = "lhs",
+  rhs = "trump_pct_X4"
+)
+
+trump_arules %>%
+  convert_rules_to_df() %>%
+  make_rules_DT()
+```
+
+### Generate association rules for strong Biden support
+
+```{r}
+biden_arules <- run_apriori(
+  trans = transactions,
+  min_supp = 0.001,
+  min_conf = 0.001,
+  minlen = 2,
+  maxlen = 2,
+  default = "lhs",
+  rhs = "trump_pct_X1"
+)
+
+biden_arules %>%
+  convert_rules_to_df() %>%
+  make_rules_DT()
+```
+
+

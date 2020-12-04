@@ -1,16 +1,15 @@
-library(tidycensus)
+
 library(dplyr)
 library(tidyr)
-library(stringr)
 
-source("call_api.R")
-source("tag_colnames.R")
+source("R/utils/call_api.R")
+source("R/utils/tag_colnames.R")
+source("R/utils/get_acs_variables.R")
 
 get_income <- function(tag) {
 
   variables <- load_acs_vars() %>%
-    filter(str_detect(concept, "PER CAPITA INCOME")) %>%
-    filter(!str_detect(concept, "INDIAN|HAWAIIAN|SOME|TWO|NOT|ASIAN")) %>%
+    filter(concept == "PER CAPITA INCOME IN THE PAST 12 MONTHS (IN 2018 INFLATION-ADJUSTED DOLLARS)") %>%
     select(name, concept) %>%
     distinct()
   
