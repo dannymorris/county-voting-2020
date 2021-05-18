@@ -9,7 +9,7 @@ get_acs_variables <- function(year = 2018, dataset = "acs5") {
 }
 
 load_acs_vars <- function() {
-  read_csv("data/acs_variables.csv")
+  read_csv("acs_variables.csv")
 }
 
 get_acs_concepts <- function() {

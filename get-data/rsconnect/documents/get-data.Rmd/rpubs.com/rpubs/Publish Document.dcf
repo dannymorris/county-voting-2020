@@ -1,0 +1,11 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/770996/c521873d56ea4f3a82ef331144641188
+bundleId: https://api.rpubs.com/api/v1/document/770996/c521873d56ea4f3a82ef331144641188
+url: http://rpubs.com/DRMORRIS/770996/edit
+when: 1621308521.14448
+lastSyncTime: 1621308521.14449

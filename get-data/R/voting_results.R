@@ -2,8 +2,8 @@
 library(dplyr)
 library(readr)
 
-get_voting_results <- function() {
-  out <- read_csv("data/presidential.csv") %>%
+get_voting_results <- function(filename) {
+  out <- read_csv(filename) %>%
     select(state, fips, name, votes,
            trump = results_trumpd,
            biden = results_bidenj,

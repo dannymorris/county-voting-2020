@@ -1,5 +1,5 @@
 ---
-title: Association rule mining to find correlations between presidential preference and county-level population demographics using Census data
+title: "Exploratory Data Mining: Collecting county-level voting and demographic data"
 author: "Danny Morris"
 date: "12/3/2020"
 output: 
@@ -15,14 +15,23 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
 ```
 
+```{r, eval=F, echo=F}
+# set the working directory for interactive development
+# but ignore when knitting the document
+setwd("get-data")
+```
+
 ## R packages
 
 ```{r}
+# install.packages("tidycensus")
+# install.packages("gistr")
+# install.packages("DT")
 library(dplyr)
 library(tibble)
 library(tidycensus)
-library(arules)
 library(DT)
+library(gistr)
 ```
 
 ## Load functions and Census API key
@@ -30,7 +39,6 @@ library(DT)
 ```{r}
 census_api_key(Sys.getenv("CENSUS_API_KEY"))
 
-source("R/utils/arules_utils.R")
 source("R/voting_results.R")
 source("R/acs/population.R")
 source("R/acs/age.R")
@@ -50,10 +58,9 @@ source("R/acs/veterans.R")
 ### Presidential voting outcomes
 
 ```{r}
-votes <- get_voting_results()
+votes <- get_voting_results(filename="presidential.csv")
 
-datatable(votes) %>%
-  formatRound(columns = c("trump_pct", "biden_pct", "margin"), digits = 3)
+datatable(votes)
 ```
 
 ### American Community Survey (ACS) demographic variables
@@ -71,7 +78,7 @@ County-level demographic characteristics taken from the 2018 5-year American Com
 - Population counts by insurance coverage
 - Population counts by veteran status
 
-```{r}
+```{r, cache=T}
 population <- get_population(tag = "POPULATION")
 age <- get_age(tag = "AGE")
 race <- get_race(tag = "RACE")
@@ -103,9 +110,13 @@ data_joins <- votes %>%
   inner_join(veterans , by = c("fips" = "GEOID")) %>%
   drop_na()
 
-colnames(data_joins) %>%
-  enframe(name = "column_position", value = "column_name") %>%
-  datatable(caption = "Column names")
+data_joins %>%
+  head() %>%
+  datatable() %>%
+  formatRound(
+    columns = c("trump_pct", "margin"), 
+    digits = 3
+  )
 ```
 
 ### Adjust demographics by population size
@@ -125,67 +136,25 @@ population_adjusted <- data_joins %>%
   mutate_at(vars(contains("RACE"),
                  contains("CITIZEN")),
             list(~./POPULATION_Total)) 
+
+population_adjusted %>%
+  head() %>%
+  datatable() %>%
+  formatRound(
+    columns = 5:52, 
+    digits = 3
+  )
 ```
 
-## Association rule mining
+## Write data to local file
 
-### Convert numeric variables to discrete categories
+```{r, eval=F}
+write_csv(population_adjusted, "county_data.csv")
+```
+
+## Session info
 
 ```{r}
-decile_data <- population_adjusted %>%
-  select(-fips, -state, -name, -party_winner, -margin, 
-         -AGE_18_Plus, -POPULATION_Total) %>%
-  mutate(trump_pct = bucket_percentage(trump_pct)) %>%
-  mutate_at(vars(-trump_pct), convert_numeric_to_discrete) 
+sessionInfo()
 ```
-
-### Convert discrete categories to binary indicators
-
-```{r}
-binary_data <- decile_data %>%
-  convert_to_dummies()
-```
-
-### Convert binary indicators to transactions
-
-```{r}
-transactions <- convert_df_to_transactions(df = binary_data)
-```
-
-### Generate association rules for strong Trump support
-
-```{r}
-trump_arules <- run_apriori(
-  trans = transactions,
-  min_supp = 0.001,
-  min_conf = 0.001,
-  minlen = 2,
-  maxlen = 2,
-  default = "lhs",
-  rhs = "trump_pct_X4"
-)
-
-trump_arules %>%
-  convert_rules_to_df() %>%
-  make_rules_DT()
-```
-
-### Generate association rules for strong Biden support
-
-```{r}
-biden_arules <- run_apriori(
-  trans = transactions,
-  min_supp = 0.001,
-  min_conf = 0.001,
-  minlen = 2,
-  maxlen = 2,
-  default = "lhs",
-  rhs = "trump_pct_X1"
-)
-
-biden_arules %>%
-  convert_rules_to_df() %>%
-  make_rules_DT()
-```
-
 
